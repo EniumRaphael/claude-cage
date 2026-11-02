@@ -1,0 +1,75 @@
+name: Update flake.lock
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 3 * * *"
+
+jobs:
+  update-lockfile:
+    runs-on: nix
+    steps:
+      - name: Get repo info
+        id: repo
+        run: |
+          echo "full_name=${GITHUB_REPOSITORY}" >> "$GITHUB_OUTPUT"
+          echo "server_url=${GITHUB_SERVER_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout (git manuel)
+        env:
+          REPO_URL: ${{ steps.repo.outputs.server_url }}/${{ steps.repo.outputs.full_name }}.git
+        run: |
+          git clone "${REPO_URL}" .
+          git config user.name "Flake Updater"
+          git config user.email "no-reply@enium.eu"
+
+      - name: Enable flakes
+        run: |
+          mkdir -p ~/.config/nix
+          echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
+
+      - name: Check last commit author
+        id: lastcommit
+        run: |
+          LAST_AUTHOR_EMAIL=$(git log -1 --pretty=format:'%ae')
+          echo "Last commit author email: ${LAST_AUTHOR_EMAIL}"
+          if [ "${LAST_AUTHOR_EMAIL}" = "no-reply@enium.eu" ]; then
+            echo "is_bot=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_bot=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update flake.lock
+        id: update
+        run: |
+          nix flake update
+          if git diff --quiet flake.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit (amend)
+        if: steps.update.outputs.changed == 'true' && steps.lastcommit.outputs.is_bot == 'true'
+        run: |
+          git add flake.lock
+          git commit --amend --no-edit
+
+      - name: Commit (new)
+        if: steps.update.outputs.changed == 'true' && steps.lastcommit.outputs.is_bot == 'false'
+        run: |
+          git add flake.lock
+          git commit -m "chore(nix[flake]): update flake.lock"
+
+      - name: Push
+        if: steps.update.outputs.changed == 'true'
+        env:
+          FORGEJO_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          REPO_FULL_NAME: ${{ steps.repo.outputs.full_name }}
+        run: |
+          HOST=git.enium.eu
+          if [ "${{ steps.lastcommit.outputs.is_bot }}" = "true" ]; then
+            git push --force-with-lease "https://oauth2:${FORGEJO_TOKEN}@${HOST}/${REPO_FULL_NAME}.git"
+          else
+            git push "https://oauth2:${FORGEJO_TOKEN}@${HOST}/${REPO_FULL_NAME}.git"
+          fi
