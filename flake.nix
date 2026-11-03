@@ -45,15 +45,61 @@
         lib.makeBinPath (
           with pkgs;
           [
+            # shell and core utilities
             bashInteractive
             coreutils
-            git
-            ripgrep
+            findutils
             gnugrep
             gnused
-            findutils
+            gawk
+            diffutils
+            patch
+            which
+            less
+            file
+            tree
+            procps
+            lsof
+            util-linux
+            perl
+            ncurses
+
+            # archives
             gnutar
             gzip
+            bzip2
+            xz
+            unzip
+            zip
+
+            # search, vcs, network, data
+            ripgrep
+            fd
+            git
+            curl
+            wget
+            openssl
+            sqlite
+            yq-go
+            bc
+            jq
+
+            # scripting (MCP servers, helper scripts)
+            (python3.withPackages (
+              ps: with ps; [
+                pip
+                virtualenv
+              ]
+            ))
+            uv
+            nodejs
+
+            # debug
+            lldb
+            valgrind
+            strace
+            binutils
+
           ]
         );
 
